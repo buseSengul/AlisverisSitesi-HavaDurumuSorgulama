@@ -31,11 +31,11 @@ Bu proje, Python ile geliştirilmiş bir **konsol tabanlı alışveriş sepeti u
 
 ---
 
-# Hava Durumu Uygulaması
+# 🛒 Hava Durumu Uygulaması
 
 Bu Python tabanlı uygulama, şehirlerin hava durumunu yönetmek için geliştirilmiştir. Kullanıcı, şehirleri ekleyebilir, şehirlerin sıcaklıklarını güncelleyebilir ve mevcut hava durumunu sorgulayabilir. Ayrıca, sıcaklığa göre kullanıcıya kıyafet tavsiyesinde bulunur.
 
-## Nasıl Çalışır?
+## 🚀 Nasıl Çalışır?
 
 1. **Şehir Ekleme:**
    - Kullanıcı, yeni bir şehir adı ve sıcaklık girerek o şehri sisteme ekleyebilir.
@@ -58,7 +58,7 @@ Uygulama, terminal üzerinden çalışmaktadır ve aşağıdaki menü seçenekle
 - **3. Şehir hava durumu sorgula**
 - **4. Çıkış**
 
-## Özellikler
+## 📦 Uygulama Özellikleri
 
 - **Şehir Ekleme:** Yeni şehirler eklenebilir ve sıcaklıkları ayarlanabilir.
 - **Sıcaklık Güncelleme:** Var olan şehirlerin sıcaklık bilgisi güncellenebilir.
