@@ -89,3 +89,81 @@ debug:
   enable: False
   log_level: "DEBUG" # Options: DEBUG, INFO, WARN, ERROR, FATAL
   log_file: "/tmp/visual_localizer_debug.log" # Not used in ROS
+bunu ben şu yaml a çevirdim:cam0:
+  cam_overlaps: []
+  camera_model: pinhole
+  distortion_coeffs: [-0.32077470636977023, 0.12335327115083677, 0, 0, -0.024282788320832371] 
+  distortion_model: radtan
+  intrinsics: [344.4698756955504, 345.54729023658206, 326.50055610816605, 64.41112901716741]
+  resolution: [640, 480]
+  frame_id: "camera"
+  rostopic: /camera/image_raw
+
+
+launch: <launch>
+
+  <arg name="input_camera_name" default="/cam0" />
+  <arg name="scale" default="1.0" />
+  <arg name="calib_path" default="$(find image_undistort)/config/arducam_april_tag_fish_eye-camchain.yaml"/>
+
+  <!-- ROS parametresini cam0 altında yükle -->
+<rosparam  file="$(arg calib_path)" command="load" />
+
+
+  <!-- Delay ile başlat -->
+  <!-- <node name="delay" pkg="rosbash" type="sleep" args="1" /> -->
+
+  <node name="image_undistort_node" pkg="image_undistort" type="image_undistort_node" output="screen">
+    <param name="frame_id" value="camera" />
+    <param name="input_camera_namespace" value="/cam0" />
+    <param name="input_camera_info_from_ros_params" value="true" />
+    <param name="output_camera_info_source" value="auto_generated" />
+    <param name="scale" value="$(arg scale)" />
+    <param name="process_image" value="true" />
+    <param name="undistort_image" value="true" />
+    <remap from="input/image" to="/camera/image_raw" />
+  </node>
+
+</launch>
+ros@ros:~/catkin_ws$ roslaunch image_undistort undistort_bag.launch
+... logging to /home/ros/.ros/log/0fa2899c-71ec-11f0-b718-a73d0944500a/roslaunch-ros-57133.log
+Checking log directory for disk usage. This may take a while.
+Press Ctrl-C to interrupt
+Done checking log file disk usage. Usage is <1GB.
+
+started roslaunch server http://ros:45741/
+
+SUMMARY
+========
+
+PARAMETERS
+ * /cam0/cam_overlaps: []
+ * /cam0/camera_model: pinhole
+ * /cam0/distortion_coeffs: [-0.3207747063697...
+ * /cam0/distortion_model: radtan
+ * /cam0/frame_id: camera
+ * /cam0/intrinsics: [344.469875695550...
+ * /cam0/resolution: [640, 480]
+ * /cam0/rostopic: /camera/image_raw
+ * /image_undistort_node/frame_id: camera
+ * /image_undistort_node/input_camera_info_from_ros_params: True
+ * /image_undistort_node/input_camera_namespace: /cam0
+ * /image_undistort_node/output_camera_info_source: auto_generated
+ * /image_undistort_node/process_image: True
+ * /image_undistort_node/scale: 1.0
+ * /image_undistort_node/undistort_image: True
+ * /rosdistro: noetic
+ * /rosversion: 1.17.4
+
+NODES
+  /
+    image_undistort_node (image_undistort/image_undistort_node)
+
+ROS_MASTER_URI=http://localhost:11311
+
+process[image_undistort_node-1]: started with pid [57166]
+[INFO] [1754391921.839375960]: Initializing nodelet with 20 worker threads.
+[INFO] [1754391921.840445810]: Started /image_undistort_node nodelet.
+[INFO] [1754391921.883188009]: Loading camera parameters
+[ERROR] [1754391922.124448869]: Image frame name is blank, cannot construct tf
+et with 20 worker threads.
