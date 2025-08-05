@@ -1,3 +1,13 @@
+dpkg -l | grep python3-catkin-tools
+dpkg -l | grep ros-noetic-usb-cam
+dpkg -l | grep ros-noetic-rqt
+dpkg -l | grep ros-noetic-rqt-image-view
+dpkg -l | grep ros-noetic-cv-bridge
+dpkg -l | grep ros-noetic-image-transport
+dpkg -l | grep ros-noetic-rosbag
+dpkg -l | grep ros-noetic-rosbash
+
+
 # 🛒 Python Alışveriş Sepeti Uygulaması
 Bu proje, Python ile geliştirilmiş bir **konsol tabanlı alışveriş sepeti uygulamasıdır**. Kullanıcı, **admin** kullanıcı adı ve **1234** şifresiyle giriş yaptıktan sonra ürünleri görüntüleyebilir, ürün satın alabilir, sepetini görüntüleyebilir ve sepetten ürün çıkarabilir. Proje, temel bir e-ticaret sistemi mantığını temsil eder.
 
