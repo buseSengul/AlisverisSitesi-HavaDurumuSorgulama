@@ -1,5 +1,5 @@
 # 🛒 Python Alışveriş Sepeti Uygulaması
-
+https://havelsan.udemy.com/?next=%2Fjoin%2Fpasswordless-auth%2F%3Faction%3Dlogin%26mode%3D%26next%3D%252Fcourse%252Fros-essentials%252Flearn%252Flecture%252F19574982#overview
 Bu proje, Python ile geliştirilmiş bir **konsol tabanlı alışveriş sepeti uygulamasıdır**. Kullanıcı, **admin** kullanıcı adı ve **1234** şifresiyle giriş yaptıktan sonra ürünleri görüntüleyebilir, ürün satın alabilir, sepetini görüntüleyebilir ve sepetten ürün çıkarabilir. Proje, temel bir e-ticaret sistemi mantığını temsil eder.
 
 ## 🚀 Nasıl Çalışır?
