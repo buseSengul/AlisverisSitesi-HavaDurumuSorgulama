@@ -4,3 +4,39 @@ https://docs.opencv.org/4.x/d9/d0c/group__calib3d.html#gae5af86788e99948d40b39a0
 
 https://medium.com/@abdulhaq.ah/what-is-solvepnp-and-how-does-it-work-d9ac70823724
 
+import torch
+from gluestick.models.superpoint_onnx import SuperPointONNX
+from gluestick import get_model
+
+class TwoViewPipelineONNX(torch.nn.Module):
+    def __init__(self, conf, onnx_path, device='cuda'):
+        super().__init__()
+        self.device = device
+
+        # SuperPoint ONNX GPU/TensorRT
+        self.extractor = SuperPointONNX(onnx_path, device=device)
+
+        # Wireframe ve matcher GPU’ya taşındı
+        self.wireframe = get_model('wireframe')(conf['extractor']).to(device)
+        self.matcher = get_model(conf['matcher']['name'])(conf['matcher']).to(device)
+
+    def forward(self, data):
+        data0 = {'image': data['image0']}
+        data1 = {'image': data['image1']}
+
+        pred0 = self.extractor(data0)
+        pred1 = self.extractor(data1)
+
+        # Wireframe çıktıları
+        wf_pred0 = self.wireframe({'image': data['image0']})
+        wf_pred1 = self.wireframe({'image': data['image1']})
+
+        pred = {
+            **{k + '0': v for k, v in pred0.items()},
+            **{k + '1': v for k, v in pred1.items()},
+            **{k + '0': v for k, v in wf_pred0.items()},
+            **{k + '1': v for k, v in wf_pred1.items()},
+        }
+
+        pred = {**pred, **self.matcher({**data, **pred})}
+        return pred
