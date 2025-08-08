@@ -5,3 +5,191 @@ https://docs.opencv.org/4.x/d9/d0c/group__calib3d.html#gae5af86788e99948d40b39a0
 https://medium.com/@abdulhaq.ah/what-is-solvepnp-and-how-does-it-work-d9ac70823724
 
 
+import cv2
+import time
+import torch
+import numpy as np
+import yaml
+import csv
+from gluestick import batch_to_np, GLUESTICK_ROOT
+from gluestick.models.two_view_pipeline_onnx import TwoViewPipelineONNX
+
+# GPU'ya doğrudan numpy'dan tensor çevirme
+def numpy_image_to_torch_gpu(image, device='cuda', non_blocking=True):
+    """
+    Numpy (H,W) veya (H,W,C) -> Torch Tensor [1,1,H,W] formatına çevirir.
+    Doğrudan GPU’ya kopyalar.
+    """
+    if image.ndim == 2:  # Gri
+        tensor = torch.from_numpy(image).float().unsqueeze(0).unsqueeze(0)
+    elif image.ndim == 3:  # Renkli -> Gri
+        image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        tensor = torch.from_numpy(image_gray).float().unsqueeze(0).unsqueeze(0)
+    else:
+        raise ValueError("Desteklenmeyen görüntü boyutu")
+
+    return tensor.to(device, non_blocking=non_blocking)
+
+def load_config(path="config.yaml"):
+    with open(path, 'r') as f:
+        return yaml.safe_load(f)
+
+def compute_matches(pipeline, img0_tensor, img1_tensor):
+    x = {'image0': img0_tensor, 'image1': img1_tensor}
+    with torch.no_grad():
+        pred = pipeline(x)
+
+    # Çizim için CPU'ya aktar
+    pred = batch_to_np(pred)
+
+    kp0, kp1 = pred["keypoints0"], pred["keypoints1"]
+    m0 = pred["matches0"]
+    valid_kp = m0 != -1
+    matched_kp0 = kp0[valid_kp]
+    matched_kp1 = kp1[m0[valid_kp]]
+
+    lines0 = pred.get("lines0", np.zeros((0, 2, 2)))
+    lines1 = pred.get("lines1", np.zeros((0, 2, 2)))
+    line_scores = pred.get("line_scores", np.zeros((len(lines0),)))
+    line_matches = pred.get("line_matches0", np.full((len(lines0),), -1))
+
+    return matched_kp0, matched_kp1, lines0, lines1, line_matches, line_scores
+
+def draw_keypoint_matches(ref_img, live_img, kp0, kp1, fps, match_time_ms):
+    h, w = ref_img.shape[:2]
+    combined = np.hstack((ref_img, live_img))
+
+    for pt1, pt2 in zip(kp0.astype(int), kp1.astype(int)):
+        x1, y1 = pt1
+        x2, y2 = pt2
+        x2 += w
+        cv2.circle(combined, (x1, y1), 3, (0, 255, 0), -1)
+        cv2.circle(combined, (x2, y2), 3, (0, 255, 0), -1)
+        cv2.line(combined, (x1, y1), (x2, y2), (255, 0, 0), 1)
+
+    cv2.putText(combined, f"FPS: {fps:.2f}", (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 0), 2)
+    cv2.putText(combined, f"{len(kp0)} keypoints", (10, 60),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+    cv2.putText(combined, f"{match_time_ms:.1f} ms", (10, 90),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (100, 255, 255), 2)
+    return combined
+
+def draw_line_matches(ref_img, live_img, lines0, lines1, matches, scores, score_threshold, fps, match_time_ms):
+    h, w = ref_img.shape[:2]
+    combined = np.hstack((ref_img, live_img))
+
+    valid_indices = np.where((matches != -1) & (scores >= score_threshold))[0]
+    num_matches = len(valid_indices)
+    colors = [tuple(np.random.randint(0, 255, size=3).tolist()) for _ in range(num_matches)]
+
+    for i, color in zip(valid_indices, colors):
+        l0 = lines0[i]
+        m = matches[i]
+        l1 = lines1[m]
+
+        x1, y1 = l0[0].astype(int)
+        x2, y2 = l0[1].astype(int)
+        x3, y3 = l1[0].astype(int)
+        x4, y4 = l1[1].astype(int)
+        x3 += w
+        x4 += w
+
+        cv2.line(combined, (x1, y1), (x2, y2), color, 2)
+        cv2.line(combined, (x3, y3), (x4, y4), color, 2)
+
+    cv2.putText(combined, f"{num_matches} lines", (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+    cv2.putText(combined, f"{fps:.2f} FPS", (10, 60),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
+    cv2.putText(combined, f"{match_time_ms:.1f} ms", (10, 90),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (100, 255, 255), 2)
+
+    return combined
+
+def main():
+    config = load_config("config.yaml")
+    width = config['camera']['width']
+    height = config['camera']['height']
+    score_threshold = config.get('score_threshold', 0.0)
+    superpoint_path = config['superpoint_path']
+
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    conf = {
+        'name': 'two_view_pipeline',
+        'use_lines': True,
+        'extractor': {
+            'name': 'wireframe',
+            'sp_params': {'force_num_keypoints': False, 'max_num_keypoints': 1000},
+            'wireframe_params': {'merge_points': True, 'merge_line_endpoints': True},
+            'max_n_lines': 300,
+        },
+        'matcher': {
+            'name': 'gluestick',
+            'weights': str(GLUESTICK_ROOT / 'resources' / 'weights' / 'checkpoint_GlueStick_MD.tar'),
+            'trainable': False,
+        },
+        'ground_truth': {'from_pose_depth': False},
+    }
+
+    # Pipeline GPU/TensorRT üzerinde çalışıyor
+    pipeline = TwoViewPipelineONNX(conf, onnx_path=superpoint_path, device=device).eval()
+
+    cap = cv2.VideoCapture(0)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+
+    print("Kamera açılıyor...")
+    time.sleep(1.0)
+    ret, ref_frame = cap.read()
+    if not ret:
+        print("Referans görüntü alınamadı.")
+        return
+    print("İlk kare referans olarak alındı. Canlı eşleştirme başlatılıyor...")
+
+    ref_tensor = numpy_image_to_torch_gpu(ref_frame, device=device)[0:1]
+
+    log_file = open("performance_log.csv", "w", newline="")
+    csv_writer = csv.writer(log_file)
+    csv_writer.writerow(["frame", "fps", "num_kp_matches", "num_line_matches", "mean_kp_score"])
+
+    frame_count = 0
+    start_time = time.time()
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        frame_count += 1
+        cur_tensor = numpy_image_to_torch_gpu(frame, device=device)[0:1]
+
+        t0 = time.time()
+        kp0, kp1, lines0, lines1, line_matches, line_scores = compute_matches(pipeline, ref_tensor, cur_tensor)
+        t1 = time.time()
+
+        fps = frame_count / (t1 - start_time)
+        match_time_ms = (t1 - t0) * 1000.0
+
+        num_kp_matches = len(kp0)
+        num_line_matches = np.sum((line_matches != -1) & (line_scores >= score_threshold))
+        mean_kp_score = np.mean(line_scores[line_matches != -1]) if np.any(line_matches != -1) else 0.0
+
+        csv_writer.writerow([frame_count, fps, num_kp_matches, num_line_matches, mean_kp_score])
+
+        kp_vis = draw_keypoint_matches(ref_frame.copy(), frame.copy(), kp0, kp1, fps, match_time_ms)
+        line_vis = draw_line_matches(ref_frame.copy(), frame.copy(), lines0, lines1, line_matches, line_scores, score_threshold, fps, match_time_ms)
+
+        cv2.imshow("Keypoint Matching", kp_vis)
+        cv2.imshow("Line Matching", line_vis)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    log_file.close()
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()
