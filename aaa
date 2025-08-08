@@ -3,3 +3,28 @@ https://docs.opencv.org/4.x/d5/d1f/calib3d_solvePnP.html
 https://docs.opencv.org/4.x/d9/d0c/group__calib3d.html#gae5af86788e99948d40b39a03f6acf623
 
 https://medium.com/@abdulhaq.ah/what-is-solvepnp-and-how-does-it-work-d9ac70823724
+
+import onnxruntime as ort
+import numpy as np
+import torch
+
+class SuperPointONNX:
+    def __init__(self, onnx_path, device='cpu'):
+        providers = ['CUDAExecutionProvider'] if device == 'cuda' else ['CPUExecutionProvider']
+        self.session = ort.InferenceSession(onnx_path, providers=providers)
+        print("onnx runtimeprovider:",self.session.get_providers())
+        self.device = device
+
+    def __call__(self, data):
+        image = data['image']
+        image_np = image.squeeze().cpu().numpy().astype(np.float32)[None, None]
+
+        output = self.session.run(None, {'image': image_np})
+        keypoints, scores, descriptors = output
+
+        return {
+            'keypoints': torch.from_numpy(keypoints).to(self.device),
+            'keypoint_scores': torch.from_numpy(scores).to(self.device),
+            'descriptors': torch.from_numpy(descriptors).to(self.device),
+        }
+  
